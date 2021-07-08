@@ -1,203 +1,175 @@
+# The solution to the problem is based on the following idea:
 
-#pip install nltk
-# pip install nltk==3.5
-# pip install numpy matplotlib
-#from chempy import Substance
+# Each hyponym of 'Addition' (or synonym of 'adding') found in the document, that may imply adding chemical/s to chemical/s will have on one or both sides.
+    #P.S. The phrase 'dissolve in' was assumed to also be a type of 'adding'.
+# one or more chemicals listed; in the same way that the + operation has operands on either side or like 'Polish notation' or 'back to front' Polish notation.
+# The boundary for an 'addition' (the terminal that stops the parsing of chemicals to be added to a specific 'addition' operation) on either side are either
+# the beginning or end of the paragraph, or a new and non-adding 'verb'; indicating that a new and different operation/action is starting/ending.
+
+# The results:
+# The results of run on a single paragraph/experimental is a tree with subtrees for each 'addition' operation found within it. 
+# The subtrees are labelled, ADDITION2SIDE, ADDITIONRIGHT and ADDTIONLEFT depending on which sides the operands are found, as explained above.
+# Each subtree/addition contains its own chemical/s as well as the units (how much of each) for each chemical. 
+
+# What's left out from this solution are the following: 
+# The program doesn't cycle through each 'addition' subtree to extract and get all its chemicals. However, the solution to the remainder of the task is trivial due to the realization 
+# that although the first ‘addition’ in a paragraph may have only just one operand (e.g. in the case where a chemical is added to a flask) later 'additions', 
+# even if they have only one operand, are always described in relation the previous addition/s and therefore can be viewed as an 'addition' 
+# consisting (in terms of what chemicals are added) of the chemical/s described with it "as well as" the previous chemical/s described 
+# in that paragraph (along with the previous 'addition' operations). In the case of the first 'addition' in a paragraph, having only one operand, it will have to be deemed 
+# as part\operand of the second 'addition' (or to previous chemicals that were already mentioned in the paragraph but not with an explicit 'addition' operator - as in experimental 11)
+# 
+# The above can be achieved by the following:
+#     for the first subtree in a paragraph:
+#         if the first one:
+#             check if it only has 1 operand and if so, deem it as an operand of the second subtree.
+#         for all remaining subtrees:
+#             unless they are a 2-sided "addition" (which is never the case here) deem them as consisting of their own chemicals together with all the chemicals listed previously (non-recursively).
+# 
+# Another issue which remains is that due to chemicals' units sometimes appearing before and sometimes after the chemical itself as well as sometimes pertaining to non-chemicals, 
+# within subtrees, parsing is still needed in order to make sure that units are properly aligned and are listed together with the chemical they belong to. (This is still not a problem to
+# checking if an 'addition' has two or one operand because even if they're not aligned, their label will be just a lone 'UNIT' (or 'CHEM', for chemical/s without units), and we consider an operand (or subtree branch) being a pair
+# of chemical/s and 'UNIT' (termed: CH&UNT) or just CHEM (without a unit). 
+
+ 
+
+
+
+
+
 import re
 from chemdataextractor import Document
-from nltk.chunk.regexp import RegexpChunkRule
 import nltk
 import itertools
-#nltk.download('punkt')
-from nltk.tokenize import word_tokenize
 from chemdataextractor.nlp.pos import ChemCrfPosTagger
-from chemdataextractor.doc import Paragraph 
 from chemdataextractor.nlp.tokenize  import  ChemWordTokenizer
-# with open("C:/Users/nuche/Downloads/exercise_experimentals.txt", 'r') as file:
-#     data = file.read().replace('\n', '')
-# tokens = word_tokenize(data)
-# print(tokens)
-f = open("C:/Users/nuche/Downloads/exercise_experimentals.txt", 'rb')
-f1 = open("C:/Users/nuche/Downloads/exercise_experimentals.txt", 'r', encoding="utf-8")
-#content_to_str = f.read(-1)
-#content_to_str =content_to_str.replace(u"\u2013",u"\u002D")
-#print(content_to_str)
-#print(type(what))
-#type(f)
-doc = Document.from_file(f)
-#doc = Document(content_to_str)
+f = open("C:/Users/nuche/Downloads/exercise_experimentals.txt", 'r', encoding="utf-8")
 
-#print(type(doc))
 all_sentences_in_para_tagged = []
-# for para in doc.elements:
-#     for sente in para.sentences:
-#       tokens = sente.pos_tagged_tokens
-#       print(tokens)
-#       print()
-
-# for sente in doc.elements[0]:
-#     sentencesList.append(sente.pos_tagged_tokens)
-
-#para = doc.elements[0]
-#token_1st_para = para.raw_tokens
-#sentencesList = para
-#print(sentencesList)
-#token_1st_para= doc.elements[0][0].pos_tagged_tokens
-#token_1st_para= sentencesList.pos_tagged_tokens
-#print(token_1st_para)
-#print(len(token_1st_para))
-#print(doc.records.serialize())
 cwt = ChemWordTokenizer()
 cpt = ChemCrfPosTagger()
 copied_chem_records = {}
 copied_para_tagged_tokens = []
-# for chem in doc.records.serialize() :
-#     for part in chem["names"][0].split(' '):
-#         if cpt.tag(cwt.tokenize(part))[0][1]!='JJ':#
-#             copied_chem_records[part]='CHEM'
-# copied_chem_records
-# tokens = cwt.tokenize("The yellow complex, chloro(ƞ4–cycloocta–1,5–diene)(1,3-dimesitylimidazol-2-ylidene) iridium(I) (0.700 g, 1.093 mmol ) , 30 was dissolved in dry THF (15 mL)")
-# print(tokens)
-# print()
-for line in f1:
+for line in f:
     if line=="\n":
         continue
-    content_to_str =line.replace(u"\u2013",u"\u002D")
+    content_to_str =line.replace(u"\u2013",u"\u002D")#The first chemical in the first line of experimental 8 has some funny dashes - rather long ones.
+    #This loop cleans the chemicals that we can extract from a paragraph with the help of .cems provided by Chemdataextractor
     for chem in Document(content_to_str)[0].cems :
-        for part in str(chem).split(' '):
+        for part in str(chem).split(' '):#To enable look up later from the token list to the chemical records. Chemdataextractor's chemical records parses
+                                         #a chemical better - not based on whitespace, whereas its tagger not so good. However Chemdataextractor also takes the non-chemical words (JJs) in between
             if cpt.tag(cwt.tokenize(part))[0][1]!='JJ':#
                 copied_chem_records[part]='CHEM'
-            #print(part)
-    #print(copied_chem_records)
     para_tokens = Document(content_to_str)[0].raw_tokens
-    #para_tokens = doc.elements[0].raw_tokens
-    #print("\n")
-    #print(para_tokens)
-    #print("endOfPara")
+    #print(copied_chem_records)
     all_sentences_in_para_tagged = []
     copied_para_tagged_tokens = []
+    #This loop tags each sentence separately, appending them to obtain the entire paragraph, tagged.
     for sente in para_tokens:
          all_sentences_in_para_tagged.append(cpt.tag(sente))
          para_tagged_tokens= list(itertools.chain(*all_sentences_in_para_tagged))
     needed_tokens = {"VB","VBG","VBN","NN","CHEM","TO","CC","-LRB-","-RRB-","CD",".","NNP","NNPS","NNS","IN","JJ","RB"}
-    #print(para_tagged_tokens)
-    #print("endOfPara")
+   #Chemdataextractor's tokenizer doesn't mark chemicals as such. Instead, it marks them as 'NN'. This loop does that and by doing a lookup
+   #in the set of chemicals previously saved. It also marks additional tokens that may have not been picked up by .cems by assuming that 'of' followed by a noun
+   #is also a chemical or some kind of substance that can serve as an operand for 'addition'. 
+   #It also flags those tokens whose tags do not appear in needed_tokens for removal, which happens subsequently.
     for tupe in range(len( para_tagged_tokens)):
-        #tru = next((item for item in doc.records.serialize() if item["names"] == [tupe[0]]),None) 
-        #if tru != None:
         if para_tagged_tokens[tupe][0] in copied_chem_records or (para_tagged_tokens[tupe-1][0] == "of" and para_tagged_tokens[tupe][1].startswith("NN")) :
-                    # if any(tupe[0] in key for key in copied_chem_records) and tupe[1]=='NN':
-          #tupe = (tupe[0],'CHEM')
           copied_para_tagged_tokens.append( (para_tagged_tokens[tupe][0],'CHEM'))
+          if para_tagged_tokens[tupe-1][0] == "of" and para_tagged_tokens[tupe][1].startswith("NN"):
+                copied_chem_records[para_tagged_tokens[tupe][0]]='CHEM'
         elif para_tagged_tokens[tupe][1] not in needed_tokens :
-          # tupe = (tupe[0],tupe[1])
           copied_para_tagged_tokens.append((para_tagged_tokens[tupe][0],'REMO'))
         else :
           copied_para_tagged_tokens.append(para_tagged_tokens[tupe])
-    #print(copied_para_tagged_tokens)
-    #print("endOfPara")
     copied_para_tagged_tokens[:] = [tupl for tupl in copied_para_tagged_tokens if tupl[1] !="REMO"]
-    #print(copied_para_tagged_tokens)
-    #print("endOfPara")#UNITS: {<-LRB-><.*>*?<-RRB->}
-    units_grammer = """UNITS: {<-LRB-><CD|IN|JJ|NN|NNS|CHEM>*<-RRB->}
+    #The assumption is that all parenthesis "probably" contains amounts/units but still care has been taken to also include those that are not within parenthesis to account for
+    #instances like in experimental 2.
+    units_grammer = r"""UNITS: {<-LRB-><CD|IN|JJ|NN|NNS|CHEM>*<-RRB->}
     {<CD><NN>}
-    """#  {(<CD><NN>)*}
+    """
     units_parser = nltk.RegexpParser(units_grammer)
     para_units_condesed = units_parser.parse( copied_para_tagged_tokens)
-    #print(para_units_condesed)
-    # print(para_units_condesed)
-    # print("endOfPara")
-    #print(para_units_condesed.draw())
-    
-    
-    
+
+    #This loop seeks to further improve on the poor chemical tagging by .cems and the lack of septicity of the general tagger by assuming that each NN (or sometimes even JJ for some
+    #odd reason - like 2-methylbenzaldehyde) preceding a unit that contains either of the following 4 measures are probably chemicals. 
     for subtree in range(len(para_units_condesed)) :
         if type(para_units_condesed[subtree]) == nltk.tree.Tree and  type(para_units_condesed[subtree-1]) !=  nltk.tree.Tree : 
-            
-            #para_units_condesed[subtree-1][1]='CHEM'
             units_chunk_merged = ' '.join(c[0] for c in para_units_condesed[subtree])
             a = re.compile(r'\bmmol\b', re.IGNORECASE)
             b = re.compile(r'\bmol\b', re.IGNORECASE)
             c = re.compile(r'\bmg\b', re.IGNORECASE)
             d = re.compile(r'\bml\b', re.IGNORECASE)
-            #NN_tag = re.compile(r'NN.?')
-            #print(type(para_units_condesed[subtree-1]))
             if  (( a.search( units_chunk_merged) or b.search( units_chunk_merged) or c.search( units_chunk_merged) or d.search( units_chunk_merged))
              and (  para_units_condesed[subtree-1][1] == "NN" or para_units_condesed[subtree-1][1] == "JJ" )):
                 copied_chem_records[para_units_condesed[subtree-1][0]]='CHEM'
-                #print(para_units_condesed[subtree-1][0])
-                #print(' '.join(c[0] for c in para_units_condesed[subtree]))
-            #elif para_units_condesed[subtree+2][1] =="NNP"
+  
     copied_para_tagged_tokens = []
+    needless_tokens = {"JJ","-LRB-","RB"}#We can now get rid of the few tokens we kept until now for certain clues.
+    number_of_additions=0
+    #This loop looks for the 'addition' and 'portional' words and tags them as such. It also assumes that 'dissolve in' when relating to two chemicals, or a chemical 
+    #and e.g. a flask, is a type of 'addition'.
+    #print(copied_chem_records)
     for tupe in range(len(para_units_condesed)):
         if type(para_units_condesed[tupe]) != nltk.tree.Tree :
             if para_units_condesed[tupe][0] in copied_chem_records :
                 copied_para_tagged_tokens.append( (para_units_condesed[tupe][0],'CHEM'))
             elif ((para_units_condesed[tupe][0].lower().startswith("add") and not(para_units_condesed[tupe][0].lower().endswith("nal"))) or ('dissolved' in para_units_condesed[tupe][0] and para_units_condesed[tupe+1][1]=='IN' )) :
                 copied_para_tagged_tokens.append((para_units_condesed[tupe][0],'ADD'))
+                number_of_additions+=1
             elif  ('dropwise' in para_units_condesed[tupe][0]) :
                 copied_para_tagged_tokens.append((para_units_condesed[tupe][0],'PORTN'))
-            elif (para_units_condesed[tupe][1].startswith("NN") and  not(para_units_condesed[tupe][1].endswith("NP"))) or para_units_condesed[tupe][1] == "IN" or para_units_condesed[tupe][1] == "."  or para_units_condesed[tupe][1] == "JJ" or para_units_condesed[tupe][1] == "-LRB-" or para_units_condesed[tupe][1] == "RB":
+            elif para_units_condesed[tupe][1] in needless_tokens :
                 continue
             else:
                 copied_para_tagged_tokens.append(para_units_condesed[tupe])
-        # elif tupe[1] not in needed_tokens :
-        #   copied_para_tagged_tokens.append((tupe[0],'REMO'))
         else :
           copied_para_tagged_tokens.append(para_units_condesed[tupe])
-    print(copied_para_tagged_tokens)
-    # print("endOfPara")
-    # units_grammer = """UNITS: {<-LRB-><CD|IN|NN|>*<-RRB->}
-    # {<CD><NN>}"""
-    # units_parser = nltk.RegexpParser(units_grammer)
-    # para_units_condesed = units_parser.parse( copied_para_tagged_tokens)
-    # para_units_condesed.draw()
-    #print("endOfPara")
-    #units_grammer = "ADDITION: {(<CHEM>+<UNITS>?<CC>?)+<ADD>(<CHEM>+<UNITS>?<CC>?)}<VBN>"
-    whole_chem_grammer = """CH&UNT: {<CHEM>+<UNITS>|<UNITS><CHEM>+}
-    NNP&UNT: {<NNP>+<UNITS>|<UNITS><NNP>+}"""
-    #{(<UNITS><CHEM>+)?}
-   
-    # {<UNITS><NNP>+}
-
+    
+    
+    #The reason this is done is so that the first 'addition' of each paragraph can be checked to see how many subtrees\operands it has 
+    #and so decide whether to consider it as part of the second 'addition' in the paragraph, or not. I.e. non-chemicals noun/unit pairs or orphans units are not mistaken as an operand.
+    whole_chem_grammer = r"""CH&UNT: {<CHEM>+<UNITS>|<UNITS><IN>?<CHEM>+}
+    NN*&UNT: {<NN.*>+<IN>?<UNITS>|<UNITS><IN>?<NN.*>+}"""
     chem_and_unit_parser = nltk.RegexpParser(whole_chem_grammer)
     para_units_condesed = chem_and_unit_parser.parse( copied_para_tagged_tokens)
-    #para_units_condesed.draw()
-    
-    addition_grammer = """ADDITION: {(<CH&UNT|NNP&UNT>+<UNITS>?<CC>?)+<PORTN>?<ADD><PORTN>?(<CH&UNT|NNP&UNT>+<UNITS>?<CC>?)+(^<VB.*>)*}"""
-    # {(<UNITS>*<CHEM|NNP>+<UNITS>*<CC>?)+<ADD><PORTN>?(^<VB.*>)*}
-    # {(^<VB.*>)*<PORTN>?<ADD>(<UNITS>*<CHEM|NNP>+<UNITS>*<CC>?)+}
-    addition_parser = nltk.RegexpParser(addition_grammer)
-    para_units_condesed = addition_parser.parse(para_units_condesed)
-    para_units_condesed.draw()
-    
-    addition_grammer = """ADDITION2SIDE: {(<CHEM|NNP>+<UNITS>*<CC>?)+<PORTN>?<ADD><PORTN>?(<UNITS>*<CHEM|NNP>+<UNITS>*<CC>?)+(^<VB.*>)*}
-    ADDITIONLEFT: {(<CHEM|NNP>+<UNITS>*<CC>?)+<ADD><PORTN>?(^<VB.*>)*}
-    ADDITIONRIGHT: {(^<VB.*>)*<PORTN>?<ADD>(<CHEM|NNP>+<UNITS>*<CC>?)+}
-    """
-    #LRB added to line two to deal with some tokinization issue
-    addition_parser = nltk.RegexpParser(addition_grammer)
-    para_units_condesed = addition_parser.parse( copied_para_tagged_tokens)
-    #print(copied_para_tagged_tokens)
-    #print("endOfPara")
-    para_units_condesed.draw()
-# p = Paragraph('methylbenzaldehyde')
-# p.abbreviation_definitions    
-    #print(para_tagged_tokens)
-    # myList = iter( doc.records.serialize())
-# for count in range(len(doc.records.serialize())):
-#     x =next(myList)
-#     print(x)
-# t = "names"
-# item == None
-#grammar = "Addition: {<VBD><VBN><IN><DT><NN><IN><NN><-LRB-><CD><NN>}"
-#grammar = "Addition: {<VBD><VBN><IN><DT><NN><IN><NN><-LRB-><CD><NN>}"
 
-#chunk_parser = nltk.RegexpParser(grammar)
-# tree = chunk_parser.parse(token_1st_para)
-# tree
-# tree.draw()
-# #para=doc.elements[0]
-# #para.tokens
-# #doc[0].records.serialize()
-# type(doc.records.serialize()[0])
+
+    #Remove all NN*&UNTs as well as all standalone UNITS (except for those following a NN*&UNT - as they might have fallen out due to incorrect tagging )
+    copied_para_tagged_tokens = []
+    for subtree in range(len(para_units_condesed)) :
+        if type(para_units_condesed[subtree]) == nltk.tree.Tree :
+            if (para_units_condesed[subtree].label() == "NN*&UNT" or (para_units_condesed[subtree].label() == "UNITS" and ((type(para_units_condesed[subtree-1]) == nltk.tree.Tree and para_units_condesed[subtree-1].label() != "CH&UNT")
+            or type(para_units_condesed[subtree-1]) != nltk.tree.Tree) )):
+                continue
+            else:
+                copied_para_tagged_tokens.append(para_units_condesed[subtree])
+        else:
+            copied_para_tagged_tokens.append((para_units_condesed[subtree][0],para_units_condesed[subtree][1]))
+    
+    e = re.compile(r'NN.*')
+    final_para_tagged_tokens = []
+    #Clearing NN.* and IN tokens.
+    for tupe in copied_para_tagged_tokens:
+        if type(tupe) != nltk.tree.Tree:
+            if not( e.fullmatch(tupe[1]) or tupe[1] == "IN"):
+                final_para_tagged_tokens.append(tupe)
+        else:
+              final_para_tagged_tokens.append(tupe)
+    #For safety the '.' was added as a terminal in case the VBN is just adjunct to a NN or JJ of to make a JJ; as for example with 'flame-dried' in experimental 9 or round-bottomed
+    #in experimental 4. It also makes sense that an 'addition' would not span over two sentences.
+    addition_grammer = """ADDITION2SIDE: {(<CH&UNT|CHEM>+<UNITS>?<CC>?)+<PORTN>?<ADD><PORTN>?(<CH&UNT|CHEM>+<UNITS>?<CC>?)+(^<VB.*|.>)*}
+    ADDITIONLEFT: {(<CH&UNT|CHEM>+<UNITS>?<CC>?)+<ADD><PORTN>?(^<VB.*|.>)*}
+    ADDITIONRIGHT: {(^<VB.*|.>)*<PORTN>?<ADD>(<CH&UNT|CHEM>+<UNITS>?<CC>?)+}"""
+    addition_parser = nltk.RegexpParser(addition_grammer)
+    para_additions_chunk = addition_parser.parse(final_para_tagged_tokens)
+    para_additions_chunk.draw()
+    
+    #Test: For each paragraph, checks that number of 'addition' subtrees is equal to number of ADD tags found in the paragraph.
+    number_of_add_subtrees=0
+    for subtree in para_additions_chunk :
+        if type(subtree) == nltk.tree.Tree and  subtree.label().startswith("ADDITION"):
+            number_of_add_subtrees+=1
+    assert number_of_add_subtrees == number_of_additions    
+
+
