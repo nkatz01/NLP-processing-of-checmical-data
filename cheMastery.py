@@ -43,7 +43,7 @@ import nltk
 import itertools
 from chemdataextractor.nlp.pos import ChemCrfPosTagger
 from chemdataextractor.nlp.tokenize  import  ChemWordTokenizer
-f = open("C:/Users/nuche/Downloads/exercise_experimentals.txt", 'r', encoding="utf-8")
+f = open("C:/Users/nuche/OneDrive/Documents/python/cheMastery/exercise_experimentals.txt", 'r', encoding="utf-8")
 
 all_sentences_in_para_tagged = []
 cwt = ChemWordTokenizer()
@@ -163,7 +163,7 @@ for line in f:
     ADDITIONRIGHT: {(^<VB.*|.>)*<PORTN>?<ADD>(<CH&UNT|CHEM>+<UNITS>?<CC>?)+}"""
     addition_parser = nltk.RegexpParser(addition_grammer)
     para_additions_chunk = addition_parser.parse(final_para_tagged_tokens)
-    para_additions_chunk.draw()
+    #para_additions_chunk.draw()
     
     #Test: For each paragraph, checks that number of 'addition' subtrees is equal to number of ADD tags found in the paragraph.
     number_of_add_subtrees=0
