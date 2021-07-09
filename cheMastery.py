@@ -157,7 +157,9 @@ for line in f:
         else:
               final_para_tagged_tokens.append(tupe)
     #For safety the '.' was added as a terminal in case the VBN is just adjunct to a NN or JJ of to make a JJ and so isn't really signifying a new action/operation; 
-    #as for example with 'flame-dried' in experimental 9 or round-bottomed in experimental 4. It also makes sense that an 'addition' would not span over two sentences.
+    #as for example with 'flame-dried' in experimental 9 or round-bottomed in experimental 4; or when there isn't a VBN in between a chemical and the next addtion operation
+    #although\and the chemical really belongs to a previous operation, as in the end of the first sentence of exprimental 3 (nitrogen).
+    #It also makes sense that an 'addition' would not span over two sentences.
     addition_grammer = """ADDITION2SIDE: {(<CH&UNT|CHEM>+<UNITS>?<CC>?)+<PORTN>?<ADD><PORTN>?(<CH&UNT|CHEM>+<UNITS>?<CC>?)+(^<VB.*|.>)*}
     ADDITIONLEFT: {(<CH&UNT|CHEM>+<UNITS>?<CC>?)+<ADD><PORTN>?(^<VB.*|.>)*}
     ADDITIONRIGHT: {(^<VB.*|.>)*<PORTN>?<ADD>(<CH&UNT|CHEM>+<UNITS>?<CC>?)+}"""
